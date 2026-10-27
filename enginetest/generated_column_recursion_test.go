@@ -30,24 +30,8 @@ import (
 // subqueries in generated column and functional index expressions, so these tests write the expressions directly
 // into the stored schema to simulate schemas that predate that validation.
 func TestGeneratedColumnRecursion(t *testing.T) {
-	newEngine := func(t *testing.T, setup ...string) (*sqle.Engine, *sql.Context) {
-		harness := enginetest.NewDefaultMemoryHarness()
-		e, err := harness.NewEngine(t)
-		require.NoError(t, err)
-		if enginetest.IsServerEngine(e) {
-			t.Skip("skipping for server engine as these tests modify the stored schema directly through the catalog")
-		}
-		engine := e.(*sqle.Engine)
-		ctx := enginetest.NewContext(harness)
-		for _, q := range setup {
-			_, err := runQuery(ctx, engine, q)
-			require.NoError(t, err, q)
-		}
-		return engine, ctx
-	}
-
 	t.Run("generated column reads its own table", func(t *testing.T) {
-		engine, ctx := newEngine(t,
+		engine, ctx := newGeneratedColumnTestEngine(t,
 			"CREATE TABLE t (pk INT PRIMARY KEY, a INT, b INT AS (a + 1) VIRTUAL);",
 			"INSERT INTO t (pk, a) VALUES (1, 1);",
 		)
@@ -67,7 +51,7 @@ func TestGeneratedColumnRecursion(t *testing.T) {
 	})
 
 	t.Run("generated columns read each other's tables", func(t *testing.T) {
-		engine, ctx := newEngine(t,
+		engine, ctx := newGeneratedColumnTestEngine(t,
 			"CREATE TABLE t1 (pk INT PRIMARY KEY, a INT, b INT AS (a + 1) VIRTUAL);",
 			"CREATE TABLE t2 (pk INT PRIMARY KEY, a INT, b INT AS (a + 1) VIRTUAL);",
 		)
@@ -82,7 +66,7 @@ func TestGeneratedColumnRecursion(t *testing.T) {
 	})
 
 	t.Run("functional index expression reads its own table", func(t *testing.T) {
-		engine, ctx := newEngine(t,
+		engine, ctx := newGeneratedColumnTestEngine(t,
 			"CREATE TABLE t (pk INT PRIMARY KEY, a INT);",
 			"INSERT INTO t VALUES (1, 1);",
 			"CREATE INDEX idx ON t ((a + 1));",
@@ -95,7 +79,7 @@ func TestGeneratedColumnRecursion(t *testing.T) {
 	})
 
 	t.Run("non-recursive references are not reported as recursion", func(t *testing.T) {
-		engine, ctx := newEngine(t,
+		engine, ctx := newGeneratedColumnTestEngine(t,
 			"CREATE TABLE t1 (pk INT PRIMARY KEY, a INT, b INT AS (a + 1) VIRTUAL);",
 			"CREATE TABLE t2 (pk INT PRIMARY KEY, a INT, b INT AS (a + 1) VIRTUAL);",
 			"INSERT INTO t2 (pk, a) VALUES (1, 10), (2, 20);",
@@ -116,6 +100,23 @@ func TestGeneratedColumnRecursion(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []sql.Row{{int32(1), int32(11), int32(21)}, {int32(2), int32(21), int32(21)}}, rows)
 	})
+}
+
+// newGeneratedColumnTestEngine returns a memory engine and context after running the |setup| queries.
+func newGeneratedColumnTestEngine(t *testing.T, setup ...string) (*sqle.Engine, *sql.Context) {
+	harness := enginetest.NewDefaultMemoryHarness()
+	e, err := harness.NewEngine(t)
+	require.NoError(t, err)
+	if enginetest.IsServerEngine(e) {
+		t.Skip("skipping for server engine as these tests modify the stored schema directly through the catalog")
+	}
+	engine := e.(*sqle.Engine)
+	ctx := enginetest.NewContext(harness)
+	for _, q := range setup {
+		_, err := runQuery(ctx, engine, q)
+		require.NoError(t, err, q)
+	}
+	return engine, ctx
 }
 
 // setGeneratedExpression overwrites the stored generated expression of |column| in |table|, bypassing DDL validation.
