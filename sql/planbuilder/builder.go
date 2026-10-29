@@ -54,9 +54,6 @@ type Builder struct {
 	// virtualTables tracks the tables whose generated columns are currently being resolved by buildVirtualTableScan,
 	// so that a generated column expression that references its own table errors instead of recursing forever.
 	virtualTables map[string]struct{}
-	// skipVirtualColumnScans disables wrapping resolved tables that have virtual columns in a VirtualColumnTable. See
-	// disableVirtualColumnScans.
-	skipVirtualColumnScans bool
 
 	tabId      sql.TableId
 	colId      columnId
@@ -71,6 +68,10 @@ type Builder struct {
 
 	// inWindow tracks whether we are inside window function arguments.
 	inWindow bool
+
+	// skipVirtualColumnScans disables wrapping resolved tables that have virtual columns in a VirtualColumnTable. See
+	// disableVirtualColumnScans.
+	skipVirtualColumnScans bool
 
 	// aggregateArgumentRoot points to the source scope where the current
 	// aggregate's arguments are being bound. Its query block and enclosing
